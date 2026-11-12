@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>용용이 할일</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#3a3b40" id="themeColor">
+<style>
+  :root { --bg: #3a3b40; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: #fff;
+    font-family: -apple-system, "Noto Sans KR", "Malgun Gothic", sans-serif;
+    transition: background .3s; overflow: hidden;
+    user-select: none; -webkit-user-select: none;
+  }
+  .top {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: calc(env(safe-area-inset-top) + 18px) 26px 10px;
+  }
+  .icon-btn {
+    width: 44px; height: 44px; border: none; background: none; color: rgba(255,255,255,.85);
+    font-size: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%;
+  }
+  .icon-btn:active { background: rgba(255,255,255,.12); }
+  .plus {
+    width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,.85);
+    color: var(--bg); font-size: 26px; font-weight: 700; line-height: 32px; text-align: center;
+  }
+  #list { list-style: none; margin: 0; padding: 0 0 120px; height: calc(100% - 80px); overflow-y: auto; }
+  .item { position: relative; overflow: hidden; border-bottom: 1px solid rgba(255,255,255,.07); }
+  .item .back {
+    position: absolute; inset: 0; background: #2ecc71; display: flex; justify-content: space-between;
+    align-items: center; padding: 0 28px; font-size: 26px; font-weight: 700; opacity: 0;
+  }
+  .item .front {
+    position: relative; background: var(--bg); padding: 26px 24px; text-align: center;
+    font-size: 19px; line-height: 1.4; word-break: break-all; touch-action: pan-y;
+  }
+  .item.gone { transition: height .25s, opacity .25s; }
+  .empty { text-align: center; color: rgba(255,255,255,.4); margin-top: 35vh; font-size: 16px; line-height: 1.8; }
+
+  /* 입력창 */
+  .sheet-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: flex-end; z-index: 10;
+  }
+  .sheet-bg.show { display: flex; }
+  .sheet {
+    width: 100%; background: #fff; color: #222; border-radius: 18px 18px 0 0;
+    padding: 20px 18px calc(env(safe-area-inset-bottom) + 18px); max-height: 85vh; overflow-y: auto;
+  }
+  .sheet h3 { margin: 0 0 14px; font-size: 17px; }
+  .row { display: flex; gap: 8px; }
+  .row input {
+    flex: 1; font-size: 17px; padding: 12px 14px; border: 1.5px solid #ccc; border-radius: 10px; outline: none;
+  }
+  .row input:focus { border-color: #7b5cff; }
+  .btn { border: none; border-radius: 10px; padding: 0 18px; font-size: 16px; font-weight: 700; background: #7b5cff; color: #fff; }
+  .btn.gray { background: #e5e5ea; color: #333; }
+
+  /* 설정 */
+  .colors { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+  .color { width: 46px; height: 46px; border-radius: 50%; border: 3px solid transparent; }
+  .color.on { border-color: #222; }
+  .guide { background: #f4f2ff; border-radius: 12px; padding: 14px 16px; font-size: 14px; line-height: 1.7; color: #333; }
+  .guide b { color: #5a3fe0; }
+  .guide ol { margin: 6px 0 0; padding-left: 20px; }
+  .trash-head { display: flex; justify-content: space-between; align-items: center; margin: 22px 0 10px; }
+  .trash-head h3 { margin: 0; }
+  .trash-head .btn { height: 34px; font-size: 14px; background: #e74c3c; }
+  .trash-list { list-style: none; margin: 0 0 22px; padding: 0; border: 1px solid #eee; border-radius: 12px; overflow: hidden; }
+  .trash-list li { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 15px; }
+  .trash-list li:last-child { border-bottom: none; }
+  .trash-list .t { flex: 1; color: #555; text-decoration: line-through; word-break: break-all; }
+  .trash-list .d { font-size: 12px; color: #999; white-space: nowrap; }
+  .trash-list button { border: none; border-radius: 8px; padding: 7px 10px; font-size: 13px; font-weight: 700; }
+  .trash-list .r { background: #e8f8ef; color: #1e9e57; }
+  .trash-list .x { background: #fdecea; color: #e74c3c; }
+  .trash-empty { color: #aaa; text-align: center; padding: 16px; font-size: 14px; }
+  .close-row { margin-top: 18px; display: flex; }
+  .close-row .btn { flex: 1; height: 46px; }
+
+  /* 되돌리기 */
+  #toast {
+    position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 28px); transform: translate(-50%, 140px);
+    background: #222; color: #fff; padding: 12px 14px 12px 20px; border-radius: 30px; display: flex; gap: 14px;
+    align-items: center; font-size: 15px; transition: transform .25s; z-index: 5; max-width: 90%;
+  }
+  #toast.show { transform: translate(-50%, 0); }
+  #toast span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55vw; }
+  #toast button { background: #2ecc71; color: #fff; border: none; border-radius: 20px; padding: 7px 14px; font-weight: 700; font-size: 14px; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <button class="icon-btn" id="setBtn" aria-label="설정">⚙</button>
+    <button class="icon-btn" id="addBtn" aria-label="추가"><div class="plus">+</div></button>
+  </div>
+
+  <ul id="list"></ul>
+
+  <!-- 추가/수정 -->
+  <div class="sheet-bg" id="editBg">
+    <div class="sheet">
+      <h3 id="editTitle">할 일 추가</h3>
+      <div class="row">
+        <input id="editInput" placeholder="할 일을 적어주세요" enterkeyhint="done">
+        <button class="btn" id="saveBtn">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 설정 -->
+  <div class="sheet-bg" id="setBg">
+    <div class="sheet">
+      <h3>배경색</h3>
+      <div class="colors" id="colors"></div>
+
+      <div class="trash-head">
+        <h3>🗑 휴지통 <span id="trashCount" style="color:#999;font-size:14px"></span></h3>
+        <button class="btn" id="emptyTrash">전체 버리기</button>
+      </div>
+      <ul class="trash-list" id="trashList"></ul>
+
+      <h3>잠금 해제하면 바로 열기</h3>
+      <div class="guide">
+        웹앱은 스스로 잠금 해제를 감지할 수 없어서, 삼성 <b>모드 및 루틴</b>으로 설정합니다.
+        <ol>
+          <li>크롬 메뉴(⋮) → <b>홈 화면에 추가 → 설치</b>로 이 앱을 먼저 설치</li>
+          <li>갤럭시 스토어에서 <b>Good Lock</b> 설치 → 안에서 <b>루틴+</b> 설치</li>
+          <li>설정 → <b>모드 및 루틴 → 루틴 → +</b></li>
+          <li>조건(만약): <b>잠금 해제 시</b> 선택</li>
+          <li>동작(실행): <b>앱 → 앱 열기 → 용용이 할일</b></li>
+          <li>저장하면 잠금 풀 때마다 이 화면이 먼저 뜹니다</li>
+        </ol>
+      </div>
+      <div class="close-row"><button class="btn gray" id="setClose">닫기</button></div>
+    </div>
+  </div>
+
+  <div id="toast"><span id="toastText"></span><button id="undoBtn">되돌리기</button></div>
+
+<script>
+const KEY = 'yongyong-todo';
+const COLORS = ['#3a3b40', '#4f6670', '#c08356', '#b2585e', '#7a63a8', '#4a63b5'];
+let data = { items: [], trash: [], color: COLORS[0] };
+try { const s = JSON.parse(localStorage.getItem(KEY)); if (s) data = Object.assign(data, s); } catch (e) {}
+if (!Array.isArray(data.trash)) data.trash = [];
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} };
+
+const $ = id => document.getElementById(id);
+const list = $('list');
+let editId = null, lastDeleted = null, toastTimer = null;
+
+function applyColor() {
+  document.documentElement.style.setProperty('--bg', data.color);
+  $('themeColor').setAttribute('content', data.color);
+}
+
+function render() {
+  list.innerHTML = '';
+  if (!data.items.length) {
+    list.innerHTML = '<div class="empty">할 일이 없습니다 🎉<br>+ 를 눌러 추가하세요</div>';
+    return;
+  }
+  data.items.forEach(it => {
+    const li = document.createElement('li');
+    li.className = 'item';
+    li.innerHTML = '<div class="back"><span>✓</span><span>✓</span></div><div class="front"></div>';
+    li.querySelector('.front').textContent = it.text;
+    bindSwipe(li, it);
+    list.appendChild(li);
+  });
+}
+
+function bindSwipe(li, it) {
+  const front = li.querySelector('.front'), back = li.querySelector('.back');
+  let sx = 0, sy = 0, dx = 0, mode = null, id = null;
+
+  front.addEventListener('pointerdown', e => {
+    id = e.pointerId; sx = e.clientX; sy = e.clientY; dx = 0; mode = null;
+    front.style.transition = 'none';
+  });
+  front.addEventListener('pointermove', e => {
+    if (e.pointerId !== id) return;
+    const mx = e.clientX - sx, my = e.clientY - sy;
+    if (!mode) {
+      if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my)) { mode = 'swipe'; front.setPointerCapture(id); }
+      else if (Math.abs(my) > 10) { mode = 'scroll'; }
+    }
+    if (mode === 'swipe') {
+      dx = mx;
+      front.style.transform = `translateX(${dx}px)`;
+      back.style.opacity = Math.min(Math.abs(dx) / (li.offsetWidth * 0.35), 1);
+    }
+  });
+  const end = e => {
+    if (e.pointerId !== id) return;
+    id = null;
+    if (mode === 'swipe') {
+      if (Math.abs(dx) > li.offsetWidth * 0.35) {
+        front.style.transition = 'transform .2s';
+        front.style.transform = `translateX(${dx > 0 ? '110%' : '-110%'})`;
+        setTimeout(() => removeItem(li, it), 200);
+      } else {
+        front.style.transition = 'transform .2s';
+        front.style.transform = 'translateX(0)';
+        back.style.opacity = 0;
+      }
+    } else if (!mode && e.type === 'pointerup') {
+      openEdit(it);  // 짧게 누르면 수정
+    }
+    mode = null;
+  };
+  front.addEventListener('pointerup', end);
+  front.addEventListener('pointercancel', end);
+}
+
+function removeItem(li, it) {
+  li.style.height = li.offsetHeight + 'px';
+  li.classList.add('gone');
+  requestAnimationFrame(() => { li.style.height = '0px'; li.style.opacity = 0; });
+  setTimeout(() => {
+    const idx = data.items.findIndex(x => x.id === it.id);
+    if (idx < 0) return;
+    lastDeleted = { item: data.items[idx], idx };
+    data.items.splice(idx, 1);
+    data.trash.unshift(Object.assign({}, it, { deletedAt: Date.now() }));  // 휴지통으로
+    save(); render(); showToast(it.text);
+  }, 250);
+}
+
+function showToast(text) {
+  $('toastText').textContent = '✓ ' + text;
+  $('toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $('toast').classList.remove('show'); lastDeleted = null; }, 4000);
+}
+$('undoBtn').onclick = () => {
+  if (!lastDeleted) return;
+  data.items.splice(lastDeleted.idx, 0, lastDeleted.item);
+  data.trash = data.trash.filter(x => x.id !== lastDeleted.item.id);
+  lastDeleted = null; save(); render();
+  $('toast').classList.remove('show');
+};
+
+// 추가 / 수정
+function openEdit(it) {
+  editId = it ? it.id : null;
+  $('editTitle').textContent = it ? '할 일 수정' : '할 일 추가';
+  $('editInput').value = it ? it.text : '';
+  $('editBg').classList.add('show');
+  setTimeout(() => $('editInput').focus(), 50);
+}
+function saveEdit() {
+  const text = $('editInput').value.trim();
+  if (text) {
+    if (editId) { const it = data.items.find(x => x.id === editId); if (it) it.text = text; }
+    else data.items.push({ id: Date.now() + '' + Math.random().toString(36).slice(2, 6), text });
+    save(); render();
+  }
+  if (!editId && text) { $('editInput').value = ''; $('editInput').focus(); return; } // 연속 추가
+  $('editBg').classList.remove('show');
+}
+$('addBtn').onclick = () => openEdit(null);
+$('saveBtn').onclick = saveEdit;
+$('editInput').addEventListener('keydown', e => { if (e.key === 'Enter') saveEdit(); });
+$('editBg').addEventListener('click', e => { if (e.target.id === 'editBg') $('editBg').classList.remove('show'); });
+
+// 설정
+function renderColors() {
+  $('colors').innerHTML = '';
+  COLORS.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'color' + (c === data.color ? ' on' : '');
+    d.style.background = c;
+    d.onclick = () => { data.color = c; save(); applyColor(); renderColors(); };
+    $('colors').appendChild(d);
+  });
+}
+// 휴지통
+function fmtDate(t) { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate(); }
+function renderTrash() {
+  const ul = $('trashList');
+  ul.innerHTML = '';
+  $('trashCount').textContent = data.trash.length ? data.trash.length + '개' : '';
+  $('emptyTrash').style.display = data.trash.length ? '' : 'none';
+  if (!data.trash.length) { ul.innerHTML = '<div class="trash-empty">비어 있습니다</div>'; return; }
+  data.trash.forEach(it => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="t"></span><span class="d"></span><button class="r">복원</button><button class="x">버리기</button>';
+    li.querySelector('.t').textContent = it.text;
+    li.querySelector('.d').textContent = fmtDate(it.deletedAt);
+    li.querySelector('.r').onclick = () => {
+      data.trash = data.trash.filter(x => x.id !== it.id);
+      const { deletedAt, ...item } = it;
+      data.items.push(item);
+      save(); render(); renderTrash();
+    };
+    li.querySelector('.x').onclick = () => {
+      data.trash = data.trash.filter(x => x.id !== it.id);  // 완전 삭제
+      save(); renderTrash();
+    };
+    ul.appendChild(li);
+  });
+}
+$('emptyTrash').onclick = () => {
+  if (!confirm('휴지통의 ' + data.trash.length + '개를 완전히 삭제할까요?')) return;
+  data.trash = []; save(); renderTrash();
+};
+
+$('setBtn').onclick = () => { renderColors(); renderTrash(); $('setBg').classList.add('show'); };
+$('setClose').onclick = () => $('setBg').classList.remove('show');
+$('setBg').addEventListener('click', e => { if (e.target.id === 'setBg') $('setBg').classList.remove('show'); });
+
+applyColor(); render();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
