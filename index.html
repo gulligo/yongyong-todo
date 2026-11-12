@@ -262,7 +262,7 @@ function saveEdit() {
     else data.items.push({ id: Date.now() + '' + Math.random().toString(36).slice(2, 6), text });
     save(); render();
   }
-  if (!editId && text) { $('editInput').value = ''; $('editInput').focus(); return; } // 연속 추가
+  $('editInput').blur();
   $('editBg').classList.remove('show');
 }
 $('addBtn').onclick = () => openEdit(null);
