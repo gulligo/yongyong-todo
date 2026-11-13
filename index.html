@@ -97,6 +97,8 @@
   .day-list li { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px solid #e8e8ee; font-size: 15px; }
   .day-list li span { flex: 1; word-break: break-all; }
   .day-list li button { border: none; background: #fdecea; color: #e74c3c; border-radius: 8px; padding: 6px 10px; font-weight: 700; }
+  .day-list li .tm { flex: none; color: #7b5cff; font-weight: 700; font-size: 14px; }
+  .day-list li a { background: #e8f0fe; color: #1a73e8; border-radius: 8px; padding: 6px 10px; font-weight: 700; font-size: 14px; text-decoration: none; white-space: nowrap; }
   .day-box .row input { font-size: 15px; padding: 10px 12px; }
   .day-box .btn { font-size: 14px; padding: 0 14px; }
 
@@ -166,6 +168,9 @@
         <ul class="day-list" id="dayList"></ul>
         <div class="row">
           <input id="schedInput" placeholder="이 날 할 일" enterkeyhint="done">
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input id="schedTime" type="time">
           <button class="btn" id="schedAdd">예약</button>
         </div>
       </div>
@@ -244,7 +249,8 @@ function render() {
     if (r.kind === 'sched') {
       const tag = document.createElement('span');
       tag.className = 'tag' + (r.left <= 0 ? ' today' : '');
-      tag.textContent = r.left < 0 ? md(r.it.date) + ' 지남' : r.left === 0 ? '오늘' : r.hidden ? md(r.it.date) : 'D-' + r.left;
+      tag.textContent = (r.left < 0 ? md(r.it.date) + ' 지남' : r.left === 0 ? '오늘' : r.hidden ? md(r.it.date) : 'D-' + r.left)
+        + (r.it.time ? ' ' + r.it.time : '');
       front.appendChild(tag);
     }
     bindSwipe(li, r);
@@ -387,10 +393,15 @@ function renderDay() {
   $('dayTitle').textContent = m + '월 ' + d + '일 (' + w + ') 예약';
   const ul = $('dayList');
   ul.innerHTML = '';
-  data.sched.filter(s => s.date === selDate).forEach(s => {
+  data.sched.filter(s => s.date === selDate)
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    .forEach(s => {
     const li = document.createElement('li');
-    li.innerHTML = '<span></span><button>삭제</button>';
-    li.querySelector('span').textContent = s.text;
+    li.innerHTML = (s.time ? '<span class="tm"></span>' : '') +
+      '<span class="tx"></span><a target="_blank" rel="noopener">📅 캘린더</a><button>삭제</button>';
+    if (s.time) li.querySelector('.tm').textContent = s.time;
+    li.querySelector('.tx').textContent = s.text;
+    li.querySelector('a').href = gcalUrl(s);
     li.querySelector('button').onclick = () => {
       data.sched = data.sched.filter(x => x.id !== s.id);
       save(); render(); renderCal();
@@ -398,11 +409,32 @@ function renderDay() {
     ul.appendChild(li);
   });
 }
+// 구글 캘린더 일정 추가 주소 (시간 있으면 1시간짜리, 없으면 하루 종일)
+function gcalUrl(s) {
+  const [y, m, d] = s.date.split('-').map(Number);
+  let dates;
+  if (s.time) {
+    const [hh, mm] = s.time.split(':').map(Number);
+    const st = new Date(y, m - 1, d, hh, mm), en = new Date(st.getTime() + 3600000);
+    const f = t => t.getFullYear() + pad(t.getMonth() + 1) + pad(t.getDate()) + 'T' + pad(t.getHours()) + pad(t.getMinutes()) + '00';
+    dates = f(st) + '/' + f(en);
+  } else {
+    const nx = new Date(y, m - 1, d + 1);
+    dates = y + pad(m) + pad(d) + '/' + nx.getFullYear() + pad(nx.getMonth() + 1) + pad(nx.getDate());
+  }
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+    + '&text=' + encodeURIComponent(s.text)
+    + '&dates=' + dates
+    + '&ctz=Asia/Seoul'
+    + '&details=' + encodeURIComponent('용용이 할일 예약');
+}
 function addSched() {
   const text = $('schedInput').value.trim();
   if (!text) return;
-  data.sched.push({ id: newId(), text, date: selDate });
+  const time = $('schedTime').value;  // 비워두면 날짜만
+  data.sched.push(time ? { id: newId(), text, date: selDate, time } : { id: newId(), text, date: selDate });
   $('schedInput').value = '';
+  $('schedTime').value = '';
   $('schedInput').blur();
   save(); render(); renderCal();
 }
