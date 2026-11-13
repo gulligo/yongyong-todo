@@ -100,6 +100,14 @@
   .day-box .row input { font-size: 15px; padding: 10px 12px; }
   .day-box .btn { font-size: 14px; padding: 0 14px; }
 
+  .opts { display: flex; gap: 8px; margin-bottom: 14px; }
+  .opts button { flex: 1; height: 42px; border: 1.5px solid #ddd; background: #fff; border-radius: 10px; font-size: 15px; color: #333; }
+  .opts button.on { background: #7b5cff; border-color: #7b5cff; color: #fff; font-weight: 700; }
+  .switch-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; font-size: 16px; }
+  .switch { width: 52px; height: 30px; border-radius: 15px; background: #ccc; position: relative; transition: background .2s; }
+  .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: left .2s; }
+  .switch.on { background: #7b5cff; }
+  .switch.on::after { left: 25px; }
   .trash-head { display: flex; justify-content: space-between; align-items: center; margin: 0 0 10px; }
   .trash-head h3 { margin: 0; }
   .trash-head .btn { height: 34px; font-size: 14px; background: #e74c3c; }
@@ -162,6 +170,10 @@
         </div>
       </div>
 
+      <h3>🔔 지울 때 소리</h3>
+      <div class="opts" id="soundOpts"></div>
+      <div class="switch-row"><span>진동</span><div class="switch" id="vibeSw"></div></div>
+
       <h3>배경색</h3>
       <div class="colors" id="colors"></div>
 
@@ -182,7 +194,7 @@ const KEY = 'yongyong-todo';
 const COLORS = ['#3a3b40', '#4f6670', '#c08356', '#b2585e', '#7a63a8', '#4a63b5'];
 const SHOW_BEFORE = 2; // 예약일 이틀 전부터 홈에 보임
 
-let data = { items: [], sched: [], trash: [], color: COLORS[0] };
+let data = { items: [], sched: [], trash: [], color: COLORS[0], sound: 'ding', vibe: true };
 try { const s = JSON.parse(localStorage.getItem(KEY)); if (s) data = Object.assign(data, s); } catch (e) {}
 ['items', 'sched', 'trash'].forEach(k => { if (!Array.isArray(data[k])) data[k] = []; });
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} };
@@ -267,6 +279,7 @@ function bindSwipe(li, r) {
     if (mode === 'swipe') {
       front.style.transition = 'transform .2s';
       if (Math.abs(dx) > li.offsetWidth * 0.35) {
+        doneFeedback();
         front.style.transform = `translateX(${dx > 0 ? '110%' : '-110%'})`;
         setTimeout(() => removeItem(li, r), 200);
       } else {
@@ -398,6 +411,70 @@ $('schedInput').addEventListener('keydown', e => { if (e.key === 'Enter') addSch
 $('prevM').onclick = () => { calM--; if (calM < 0) { calM = 11; calY--; } renderCal(); };
 $('nextM').onclick = () => { calM++; if (calM > 11) { calM = 0; calY++; } renderCal(); };
 
+// 소리 · 진동
+let actx = null;
+function ctx() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function tone(ac, freq, start, dur, vol, type, freqEnd) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type || 'sine';
+  o.frequency.setValueAtTime(freq, start);
+  if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, start + dur * 0.6);
+  g.gain.setValueAtTime(0.0001, start);
+  g.gain.exponentialRampToValueAtTime(vol, start + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+  o.connect(g).connect(ac.destination);
+  o.start(start); o.stop(start + dur + 0.02);
+}
+const SOUNDS = {
+  ding(ac, t) {            // 띵동
+    tone(ac, 1318.5, t, 0.35, 0.35);
+    tone(ac, 1046.5, t + 0.18, 0.5, 0.35);
+  },
+  pop(ac, t) {             // 뾱
+    tone(ac, 420, t, 0.12, 0.5, 'sine', 1300);
+  },
+  check(ac, t) {           // 착
+    const len = Math.floor(ac.sampleRate * 0.06);
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = buf; f.type = 'highpass'; f.frequency.value = 1800; g.gain.value = 0.9;
+    src.connect(f).connect(g).connect(ac.destination);
+    src.start(t);
+    tone(ac, 2200, t, 0.05, 0.15, 'square');
+  }
+};
+function playSound(name) {
+  if (!name || name === 'off' || !SOUNDS[name]) return;
+  const ac = ctx(); if (!ac) return;
+  SOUNDS[name](ac, ac.currentTime + 0.01);
+}
+function doneFeedback() {
+  playSound(data.sound);
+  if (data.vibe && navigator.vibrate) navigator.vibrate(30);
+}
+function renderSound() {
+  const box = $('soundOpts');
+  box.innerHTML = '';
+  [['off', '끄기'], ['ding', '띵동'], ['pop', '뾱'], ['check', '착']].forEach(([k, label]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (data.sound === k) b.className = 'on';
+    b.onclick = () => { data.sound = k; save(); renderSound(); playSound(k); };
+    box.appendChild(b);
+  });
+  $('vibeSw').classList.toggle('on', !!data.vibe);
+}
+$('vibeSw').onclick = () => {
+  data.vibe = !data.vibe; save(); renderSound();
+  if (data.vibe && navigator.vibrate) navigator.vibrate(30);
+};
+
 // 배경색
 function renderColors() {
   $('colors').innerHTML = '';
@@ -444,7 +521,7 @@ $('emptyTrash').onclick = () => {
 $('setBtn').onclick = () => {
   const t = new Date();
   calY = t.getFullYear(); calM = t.getMonth(); selDate = todayStr();
-  renderCal(); renderColors(); renderTrash();
+  renderCal(); renderSound(); renderColors(); renderTrash();
   $('setBg').classList.add('show');
 };
 $('setClose').onclick = () => $('setBg').classList.remove('show');
