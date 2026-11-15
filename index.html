@@ -445,8 +445,19 @@ $('nextM').onclick = () => { calM++; if (calM > 11) { calM = 0; calY++; } render
 
 // 소리 · 진동
 let actx = null;
+let master = null;
+const BOOST = 3.5;  // 기본 소리 크기 (클수록 큼)
 function ctx() {
-  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (!actx) {
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+    // 소리를 키우고, 너무 커서 찢어지지 않게 리미터로 눌러줌
+    const boost = actx.createGain(); boost.gain.value = BOOST;
+    const lim = actx.createDynamicsCompressor();
+    lim.threshold.value = -3; lim.knee.value = 0; lim.ratio.value = 20;
+    lim.attack.value = 0.001; lim.release.value = 0.1;
+    boost.connect(lim).connect(actx.destination);
+    master = boost;
+  }
   if (actx.state === 'suspended') actx.resume();
   return actx;
 }
@@ -458,16 +469,19 @@ function tone(ac, freq, start, dur, vol, type, freqEnd) {
   g.gain.setValueAtTime(0.0001, start);
   g.gain.exponentialRampToValueAtTime(vol, start + 0.01);
   g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-  o.connect(g).connect(ac.destination);
+  o.connect(g).connect(master);
   o.start(start); o.stop(start + dur + 0.02);
 }
 const SOUNDS = {
-  ding(ac, t) {            // 띵동
-    tone(ac, 1318.5, t, 0.35, 0.35);
-    tone(ac, 1046.5, t + 0.18, 0.5, 0.35);
+  ding(ac, t) {            // 띵동 (배음을 더해 또렷하게)
+    tone(ac, 1318.5, t, 0.45, 0.6);
+    tone(ac, 2637, t, 0.25, 0.15);
+    tone(ac, 1046.5, t + 0.18, 0.7, 0.6);
+    tone(ac, 2093, t + 0.18, 0.35, 0.15);
   },
   pop(ac, t) {             // 뾱
-    tone(ac, 420, t, 0.12, 0.5, 'sine', 1300);
+    tone(ac, 420, t, 0.15, 0.8, 'sine', 1300);
+    tone(ac, 840, t, 0.1, 0.2, 'triangle', 2600);
   },
   check(ac, t) {           // 착
     const len = Math.floor(ac.sampleRate * 0.06);
@@ -475,10 +489,10 @@ const SOUNDS = {
     const ch = buf.getChannelData(0);
     for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
     const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
-    src.buffer = buf; f.type = 'highpass'; f.frequency.value = 1800; g.gain.value = 0.9;
-    src.connect(f).connect(g).connect(ac.destination);
+    src.buffer = buf; f.type = 'highpass'; f.frequency.value = 1800; g.gain.value = 1;
+    src.connect(f).connect(g).connect(master);
     src.start(t);
-    tone(ac, 2200, t, 0.05, 0.15, 'square');
+    tone(ac, 2200, t, 0.06, 0.3, 'square');
   }
 };
 function playSound(name) {
