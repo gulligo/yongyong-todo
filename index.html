@@ -51,6 +51,7 @@
     vertical-align: middle; background: rgba(255,255,255,.18); font-weight: 700;
   }
   .tag.today { background: #e74c3c; }
+  .tag.old { background: #e67e22; }
   .item.gone { transition: height .25s, opacity .25s; }
   .empty { text-align: center; color: rgba(255,255,255,.4); margin-top: 35vh; font-size: 16px; line-height: 1.8; }
 
@@ -198,6 +199,7 @@
 const KEY = 'yongyong-todo';
 const COLORS = ['#3a3b40', '#4f6670', '#c08356', '#b2585e', '#7a63a8', '#4a63b5'];
 const SHOW_BEFORE = 2; // 예약일 이틀 전부터 홈에 보임
+const OLD_DAYS = 3;    // 이 날 수 이상 못 한 일은 맨 위로
 
 let data = { items: [], sched: [], trash: [], color: COLORS[0], sound: 'ding', vibe: true };
 try { const s = JSON.parse(localStorage.getItem(KEY)); if (s) data = Object.assign(data, s); } catch (e) {}
@@ -218,6 +220,13 @@ function daysLeft(dateStr) {
   const t = new Date(); t.setHours(0, 0, 0, 0);
   return Math.round((new Date(y, m - 1, d) - t) / 86400000);
 }
+// 할 일을 적은 시각 (예전 할 일은 id 앞자리에 적은 시각이 들어 있음)
+const createdOf = it => it.createdAt || parseInt(String(it.id).slice(0, 13), 10) || Date.now();
+function ageDays(it) {
+  const c = new Date(createdOf(it)); c.setHours(0, 0, 0, 0);
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  return Math.round((t - c) / 86400000);
+}
 const md = s => { const [, m, d] = s.split('-').map(Number); return m + '/' + d; };
 
 function applyColor() {
@@ -228,13 +237,23 @@ function applyColor() {
 // 홈 목록
 function render() {
   list.innerHTML = '';
-  const rows = data.items.map(it => ({ it, kind: 'items' }));
+  // 3일 이상 못 한 일은 맨 위로 (오래된 순)
+  const old = [], fresh = [];
+  data.items.forEach(it => {
+    const age = ageDays(it);
+    (age >= OLD_DAYS ? old : fresh).push({ it, kind: 'items', age });
+  });
+  old.sort((a, b) => createdOf(a.it) - createdOf(b.it));
+  const rows = old;
+  const schedRows = [];
   data.sched
     .slice().sort((a, b) => a.date.localeCompare(b.date))
     .forEach(it => {
       const left = daysLeft(it.date);
-      if (left <= SHOW_BEFORE || showAll) rows.push({ it, kind: 'sched', left, hidden: left > SHOW_BEFORE });
+      if (left <= SHOW_BEFORE || showAll) schedRows.push({ it, kind: 'sched', left, hidden: left > SHOW_BEFORE });
     });
+  // 순서: 오래 못 한 일 → 예약 → 나머지
+  rows.push(...schedRows.filter(r => !r.hidden), ...fresh, ...schedRows.filter(r => r.hidden));
 
   if (!rows.length) {
     list.innerHTML = '<div class="empty">할 일이 없습니다 🎉<br>+ 를 눌러 추가하세요</div>';
@@ -246,6 +265,12 @@ function render() {
     li.innerHTML = '<div class="back"><span>✓</span><span>✓</span></div><div class="front"></div>';
     const front = li.querySelector('.front');
     front.textContent = r.it.text;
+    if (r.age >= OLD_DAYS) {
+      const tag = document.createElement('span');
+      tag.className = 'tag old';
+      tag.textContent = r.age + '일째';
+      front.appendChild(tag);
+    }
     if (r.kind === 'sched') {
       const tag = document.createElement('span');
       tag.className = 'tag' + (r.left <= 0 ? ' today' : '');
@@ -351,7 +376,7 @@ function saveEdit() {
     if (editRef) {
       const it = data[editRef.kind].find(x => x.id === editRef.it.id);
       if (it) it.text = text;
-    } else data.items.push({ id: newId(), text });
+    } else data.items.push({ id: newId(), text, createdAt: Date.now() });
     save(); render();
   }
   $('editInput').blur();
